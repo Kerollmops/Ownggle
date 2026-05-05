@@ -15,24 +15,88 @@
 import DOMPurify from 'dompurify';
 import { Readability } from '@mozilla/readability';
 
-// Clone the document first — both DOMPurify (IN_PLACE mode) and Readability
-// mutate the node tree they receive.
-const documentClone = document.cloneNode(true);
+// ─── Page content extraction (skip own.kerollmops.com) ────────────────────────
+//
+// We don't want to index the search page itself into Meilisearch, and the
+// bridge below handles all communication for that domain.
 
-// Sanitize the clone before handing it to Readability. Readability explicitly
-// does not sanitize its input, so a malicious page could otherwise inject
-// scripts into the output. WHOLE_DOCUMENT preserves the <html>/<head>/<body>
-// structure that Readability relies on to locate the main content area.
-DOMPurify.sanitize(documentClone.documentElement, {
-  IN_PLACE: true,
-  WHOLE_DOCUMENT: true,
-});
+if (location.hostname !== 'own.kerollmops.com') {
+  // Clone the document first — both DOMPurify (IN_PLACE mode) and Readability
+  // mutate the node tree they receive.
+  const documentClone = document.cloneNode(true);
 
-const article = new Readability(documentClone).parse();
-const content = article?.textContent?.trim();
+  // Sanitize the clone before handing it to Readability.
+  DOMPurify.sanitize(documentClone.documentElement, {
+    IN_PLACE: true,
+    WHOLE_DOCUMENT: true,
+  });
 
-if (content) {
-  // The service worker will look up the matching HistoryItem to obtain the
-  // stable `id` and up-to-date `lastVisitTime` before indexing the chunks.
-  chrome.runtime.sendMessage({ type: 'PAGE_CONTENT', url: location.href, content });
+  const article = new Readability(documentClone).parse();
+  const content = article?.textContent?.trim();
+
+  if (content) {
+    chrome.runtime.sendMessage({ type: 'PAGE_CONTENT', url: location.href, content });
+  }
+}
+
+// ─── Ownggle Bridge (own.kerollmops.com only) ─────────────────────────────────
+//
+// The page at own.kerollmops.com cannot talk to the extension service worker
+// directly (no externally_connectable), so it posts window messages that this
+// content script relays to chrome.runtime and back.
+
+if (location.hostname === 'own.kerollmops.com') {
+  const ORIGIN = location.origin; // 'https://own.kerollmops.com'
+
+  // ── Page → Extension ──────────────────────────────────────────────────────
+
+  window.addEventListener('message', (event) => {
+    // Only accept messages from the same window (the page itself).
+    if (event.source !== window) return;
+    const msg = event.data;
+    if (!msg || typeof msg.type !== 'string') return;
+
+    // Save settings to chrome.storage.local so the service worker can read them.
+    if (msg.type === 'OWNGGLE_SAVE_SETTINGS') {
+      chrome.storage.local
+        .set({
+          meili_url:        msg.url       ?? '',
+          meili_admin_key:  msg.adminKey  ?? '',
+          meili_search_key: msg.searchKey ?? '',
+        })
+        .then(() => {
+          window.postMessage({ type: 'OWNGGLE_SETTINGS_SAVED' }, ORIGIN);
+        })
+        .catch((err) => {
+          window.postMessage({ type: 'OWNGGLE_SETTINGS_ERROR', error: err.message }, ORIGIN);
+        });
+    }
+
+    // Ask the service worker to start a full history sync.
+    if (msg.type === 'OWNGGLE_SYNC_HISTORY') {
+      chrome.runtime.sendMessage({ type: 'SYNC_HISTORY' }, (response) => {
+        if (chrome.runtime.lastError) {
+          window.postMessage(
+            { type: 'OWNGGLE_SYNC_ERROR', error: chrome.runtime.lastError.message },
+            ORIGIN,
+          );
+        } else if (response?.started) {
+          window.postMessage({ type: 'OWNGGLE_SYNC_STARTED' }, ORIGIN);
+        }
+      });
+    }
+  });
+
+  // ── Extension → Page ──────────────────────────────────────────────────────
+  // The service worker sends progress/completion messages via chrome.tabs.sendMessage;
+  // we relay them to the page as OWNGGLE_* window messages.
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (['SYNC_PROGRESS', 'SYNC_COMPLETE', 'SYNC_ERROR'].includes(message.type)) {
+      window.postMessage(
+        { ...message, type: 'OWNGGLE_' + message.type },
+        ORIGIN,
+      );
+    }
+  });
 }

@@ -14,8 +14,13 @@
 
 import { MeiliSearch } from 'meilisearch';
 
-const MEILISEARCH_HOST = 'http://localhost:7700';
-const MEILISEARCH_API_KEY = 'FKWCx7iTGUvHbP7LsIV1rLvujYGn1tFF4f2WFZBTTLQ';
+// ─── Storage keys ─────────────────────────────────────────────────────────────
+
+const SK_URL        = 'meili_url';
+const SK_ADMIN_KEY  = 'meili_admin_key';
+const SK_SEARCH_KEY = 'meili_search_key';
+
+// ─── Configuration ────────────────────────────────────────────────────────────
 
 /** Number of documents sent per addDocuments call. */
 const BATCH_SIZE = 1000;
@@ -26,16 +31,47 @@ const CHUNK_SIZE = 150;
 /** Number of words shared between two consecutive chunks (sliding window). */
 const CHUNK_OVERLAP = 50;
 
-const client = new MeiliSearch({
-  host: MEILISEARCH_HOST,
-  apiKey: MEILISEARCH_API_KEY,
+/** @type {string[]} */
+const BLACKLISTED_HOSTNAMES = [
+  'google.com',
+  'www.google.com',
+  'google.fr',
+  'duckduckgo.com',
+  'noai.duckduckgo.com',
+  'bing.com',
+];
+
+// ─── Settings cache ───────────────────────────────────────────────────────────
+
+/** @type {{ url: string|null, adminKey: string|null, searchKey: string|null }|null} */
+let _settingsCache = null;
+
+/** Reads settings from chrome.storage.local with a simple in-memory cache. */
+async function getSettings() {
+  if (_settingsCache) return _settingsCache;
+  const data = await chrome.storage.local.get([SK_URL, SK_ADMIN_KEY, SK_SEARCH_KEY]);
+  _settingsCache = {
+    url:       data[SK_URL]        || null,
+    adminKey:  data[SK_ADMIN_KEY]  || null,
+    searchKey: data[SK_SEARCH_KEY] || null,
+  };
+  return _settingsCache;
+}
+
+// Invalidate the cache whenever the user saves new settings.
+chrome.storage.onChanged.addListener((_changes, area) => {
+  if (area === 'local') _settingsCache = null;
 });
 
-/** Index that holds one document per visited URL (mirrors chrome.history). */
-const historyIndex = client.index('browsing-history');
+// ─── Client factory ───────────────────────────────────────────────────────────
 
-/** Index that holds word-level chunks of each page's readable text. */
-const chunksIndex = client.index('page-chunks');
+/**
+ * @param {{ url: string, adminKey: string }} settings
+ * @returns {MeiliSearch}
+ */
+function makeClient({ url, adminKey }) {
+  return new MeiliSearch({ host: url, apiKey: adminKey });
+}
 
 // ─── Index settings ───────────────────────────────────────────────────────────
 
@@ -83,19 +119,10 @@ const CHUNKS_INDEX_SETTINGS = {
   sortableAttributes: ['chunkIndex', 'lastVisitTime'],
 };
 
-/** @type {string[]} */
-const BLACKLISTED_HOSTNAMES = [
-  "google.com",
-  "google.fr",
-  "duckduckgo.com",
-  "bing.com"
-];
-
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 /**
  * Yields successive slices of `array` of length `size`.
- *
  * @template T
  * @param {T[]} array
  * @param {number} size
@@ -108,20 +135,17 @@ function* chunks(array, size) {
 }
 
 /**
- * Extracts the bare hostname from a URL (e.g. "local.kerollmops.com").
- * Returns null for IP addresses (IPv4 and IPv6) and for URLs that cannot
- * be parsed, so the field is always clean — no protocol, port, or path.
- *
+ * Extracts the bare hostname from a URL.
+ * Returns null for IP addresses, localhost, and unparseable URLs.
  * @param {string} url
  * @returns {string | null}
  */
 function extractHostname(url) {
   try {
     const { hostname } = new URL(url);
-    // IPv4 — four dot-separated digit groups
     if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return null;
-    // IPv6 — URL.hostname strips the surrounding brackets, leaving raw colons
     if (hostname.includes(':')) return null;
+    if (hostname === 'localhost') return null;
     return hostname || null;
   } catch {
     return null;
@@ -130,9 +154,7 @@ function extractHostname(url) {
 
 /**
  * Maps a Chrome HistoryItem to a `browsing-history` document.
- *
  * @param {chrome.history.HistoryItem} item
- * @returns {{ id: string, url: string, title: string, hostname: string | null, lastVisitTime: number, visitCount: number }}
  */
 function toHistoryDocument({ id, url, title, lastVisitTime, visitCount }) {
   return {
@@ -147,15 +169,13 @@ function toHistoryDocument({ id, url, title, lastVisitTime, visitCount }) {
 
 /**
  * Sends `documents` to `targetIndex` in fire-and-forget batches of BATCH_SIZE.
- * Uploads run concurrently; errors are logged without blocking the caller.
- *
  * @param {object[]} documents
- * @param {import('meilisearch').Index} [targetIndex]
+ * @param {import('meilisearch').Index} targetIndex
  */
-function indexDocuments(documents, targetIndex = historyIndex) {
+function indexDocuments(documents, targetIndex) {
   for (const batch of chunks(documents, BATCH_SIZE)) {
     targetIndex.addDocuments(batch).catch((err) => {
-      console.error('[history-meilisearch] Failed to upload batch:', err);
+      console.error('[ownggle] Failed to upload batch:', err);
     });
   }
 }
@@ -164,37 +184,25 @@ function indexDocuments(documents, targetIndex = historyIndex) {
 
 /**
  * Splits `text` into overlapping word-based chunks.
- * Each chunk is CHUNK_SIZE words long; consecutive chunks overlap by
- * CHUNK_OVERLAP words (sliding window).
- *
  * @param {string} text
  * @yields {string}
  */
 function* chunkText(text) {
   const words = text.trim().split(/\s+/);
-  const step = CHUNK_SIZE - CHUNK_OVERLAP; // advance by 100 words each time
-
+  const step = CHUNK_SIZE - CHUNK_OVERLAP;
   for (let i = 0; i < words.length; i += step) {
     yield words.slice(i, i + CHUNK_SIZE).join(' ');
-    // Stop once the last chunk has been yielded to avoid an empty tail chunk.
     if (i + CHUNK_SIZE >= words.length) break;
   }
 }
 
 /**
- * Indexes the readable text of a page as overlapping chunks in `chunksIndex`,
- * then enqueues a stale-chunk cleanup for the same page.
- *
- * Stale chunks are those that were written during an earlier visit
- * (lastVisitTime < currentLastVisitTime) for the same historyId.
- * Because Meilisearch processes tasks in FIFO order per index, the
- * deleteDocumentsByFilter task is guaranteed to run after all the
- * addDocuments tasks above it — so freshly created chunks are never at risk.
- *
+ * Indexes the readable text of a page as overlapping chunks.
  * @param {chrome.history.HistoryItem} historyItem
- * @param {string} content  Readable plain text extracted by Readability.
+ * @param {string} content  Readable plain text from Readability.
+ * @param {import('meilisearch').Index} chunksIndex
  */
-function indexPageChunks(historyItem, content) {
+function indexPageChunks(historyItem, content, chunksIndex) {
   const { id: historyId, url, lastVisitTime } = historyItem;
   const hostname = extractHostname(url);
 
@@ -213,78 +221,137 @@ function indexPageChunks(historyItem, content) {
 
   if (documents.length === 0) return;
 
-  // Upload new chunks (fire-and-forget, batched).
   indexDocuments(documents, chunksIndex);
 
-  // Remove chunks from any previous visit to the same page.
   chunksIndex
     .deleteDocuments({
       filter: `historyId = ${historyId} AND lastVisitTime < ${lastVisitTime}`,
     })
     .catch((err) => {
-      console.error('[history-meilisearch] Failed to delete stale chunks:', err);
+      console.error('[ownggle] Failed to delete stale chunks:', err);
     });
 }
 
-// ─── On install: configure indices + bulk-import the full browsing history ────
+// ─── Full sync ────────────────────────────────────────────────────────────────
 
-chrome.runtime.onInstalled.addListener(async () => {
-  // Create both indices with an explicit primary key, then apply their full
-  // settings. Both steps are fire-and-forget: Meilisearch's global FIFO task
-  // queue guarantees that updateSettings is always processed after createIndex
-  // for the same index, even without awaiting. If an index already exists the
-  // createIndex task fails silently and the queue keeps moving.
-  client.createIndex('browsing-history', { primaryKey: 'id' }).catch(console.error);
+/**
+ * Creates/configures both indices and bulk-imports the full browsing history.
+ * Sends progress + completion messages to the requesting tab.
+ * @param {number|undefined} tabId  Chrome tab to notify.
+ */
+async function handleSyncHistory(tabId) {
+  /** Sends a message to the requesting tab (best-effort, ignores errors). */
+  const notify = (msg) => {
+    if (tabId != null) {
+      chrome.tabs.sendMessage(tabId, msg).catch(() => {});
+    }
+  };
+
+  const settings = await getSettings();
+  if (!settings.url || !settings.adminKey) {
+    notify({
+      type: 'SYNC_ERROR',
+      error: 'Meilisearch is not configured. Please save your settings first.',
+    });
+    return;
+  }
+
+  const client       = makeClient(settings);
+  const historyIndex = client.index('browsing-history');
+  const chunksIndex  = client.index('page-chunks');
+
+  // Create indices (idempotent — createIndex fails silently if they already exist).
+  await client.createIndex('browsing-history', { primaryKey: 'id' }).catch(() => {});
+  await client.createIndex('page-chunks',      { primaryKey: 'id' }).catch(() => {});
+
+  // Apply settings (Meilisearch's FIFO task queue guarantees ordering).
   historyIndex.updateSettings(HISTORY_INDEX_SETTINGS).catch(console.error);
-
-  client.createIndex('page-chunks', { primaryKey: 'id' }).catch(console.error);
   chunksIndex.updateSettings(CHUNKS_INDEX_SETTINGS).catch(console.error);
 
-  const historyItems = await chrome.history.search({
-    text: '',
-    maxResults: 0,
-    startTime: 0,
-  });
+  // Fetch the full browsing history.
+  const historyItems = await chrome.history.search({ text: '', maxResults: 0, startTime: 0 });
 
-  console.log(
-    `[history-meilisearch] Indexing ${historyItems.length} history items` +
-      ` in batches of ${BATCH_SIZE}…`
-  );
+  const docs = historyItems
+    .filter((item) => {
+      const h = extractHostname(item.url ?? '');
+      return h !== null && !BLACKLISTED_HOSTNAMES.includes(h);
+    })
+    .map(toHistoryDocument);
 
-  indexDocuments(historyItems.filter((item) => {
-    return !BLACKLISTED_HOSTNAMES.includes(item.hostname);
-  }).map(toHistoryDocument));
+  console.log(`[ownggle] Syncing ${docs.length} history items…`);
+  notify({ type: 'SYNC_PROGRESS', indexed: 0, total: docs.length });
+
+  let indexed = 0;
+  for (const batch of chunks(docs, BATCH_SIZE)) {
+    await historyIndex.addDocuments(batch);
+    indexed += batch.length;
+    notify({ type: 'SYNC_PROGRESS', indexed, total: docs.length });
+  }
+
+  notify({ type: 'SYNC_COMPLETE', total: indexed });
+  console.log(`[ownggle] Sync complete: ${indexed} items queued.`);
+}
+
+// ─── On install: open the setup page ─────────────────────────────────────────
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.tabs.create({ url: 'https://own.kerollmops.com' });
 });
 
 // ─── On every new visit: upsert the updated history entry ────────────────────
 
-// chrome.history.onVisited fires after Chrome has already committed the visit
-// to its database, so the HistoryItem it delivers (visitCount, lastVisitTime)
-// is immediately up to date. No secondary lookup is needed.
-chrome.history.onVisited.addListener((item) => {
-  if (BLACKLISTED_HOSTNAMES.includes(item.hostname)) return;
-  indexDocuments([toHistoryDocument(item)]);
+chrome.history.onVisited.addListener(async (item) => {
+  const settings = await getSettings();
+  if (!settings.url || !settings.adminKey) return; // not configured yet
+
+  const hostname = extractHostname(item.url ?? '');
+  if (hostname && BLACKLISTED_HOSTNAMES.includes(hostname)) return;
+
+  const client       = makeClient(settings);
+  const historyIndex = client.index('browsing-history');
+  indexDocuments([toHistoryDocument(item)], historyIndex);
 });
 
-// ─── On page content from the content script: chunk and index ─────────────────
+// ─── Message router ───────────────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener((message, _sender) => {
-  if (message.type !== 'PAGE_CONTENT') return;
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
-  const { url, content } = message;
+  // ── SYNC_HISTORY ──────────────────────────────────────────────────────────
+  // Triggered from the setup page via the content-script bridge.
+  if (message.type === 'SYNC_HISTORY') {
+    const tabId = sender.tab?.id;
+    // Respond immediately so the page knows the request was received,
+    // then continue the heavy work asynchronously in the background.
+    sendResponse({ started: true });
+    handleSyncHistory(tabId).catch((err) => {
+      if (tabId != null) {
+        chrome.tabs.sendMessage(tabId, {
+          type: 'SYNC_ERROR',
+          error: err.message,
+        }).catch(() => {});
+      }
+      console.error('[ownggle] Sync failed:', err);
+    });
+    return false; // channel already closed by sendResponse above
+  }
 
-  // Retrieve the live HistoryItem for this URL so we have the canonical `id`
-  // and an up-to-date `lastVisitTime` to tag the chunks with.
-  // chrome.history.search does a text match; the strict url equality check
-  // below guards against substring matches on unrelated URLs.
-  chrome.history
-    .search({ text: url, maxResults: 10 })
-    .then((items) => {
-      const item = items.find((i) => i.url === url);
-      if (item) indexPageChunks(item, content);
-    })
-    .catch(console.error);
+  // ── PAGE_CONTENT ──────────────────────────────────────────────────────────
+  // Readable text extracted by the content script on every visited page.
+  if (message.type === 'PAGE_CONTENT') {
+    const { url, content } = message;
 
-  // Return undefined (not `true`) — we are not sending a response, so the
-  // message port can be closed immediately.
+    getSettings()
+      .then(async (settings) => {
+        if (!settings.url || !settings.adminKey) return;
+
+        const client      = makeClient(settings);
+        const chunksIndex = client.index('page-chunks');
+
+        const items = await chrome.history.search({ text: url, maxResults: 10 });
+        const item  = items.find((i) => i.url === url);
+        if (item) indexPageChunks(item, content, chunksIndex);
+      })
+      .catch(console.error);
+    // No response needed; return nothing.
+  }
 });

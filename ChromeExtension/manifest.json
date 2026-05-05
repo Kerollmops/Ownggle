@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "History to Meilisearch",
+  "name": "Ownggle — History to Meilisearch",
   "version": "1.0",
-  "description": "On install, reads the full browsing history and indexes it into a local Meilisearch instance.",
-  "permissions": ["history"],
-  "host_permissions": ["http://localhost:7700/*"],
+  "description": "Index your browsing history into your own Meilisearch instance and search it at own.kerollmops.com.",
+  "permissions": ["history", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "dist/service-worker.js",
     "type": "module"

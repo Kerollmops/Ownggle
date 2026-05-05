@@ -68,6 +68,15 @@
       }
 
       .engine-cards { max-width: 46rem; }
+
+      /* Flush accordion styling */
+      #settingsAccordion .accordion-button {
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      #settingsAccordion .accordion-button:not(.collapsed) {
+        box-shadow: none;
+      }
     </style>
   </head>
   <body>
@@ -81,57 +90,96 @@
                style="max-width:42rem;"
                placeholder="Search your history…"
                autofocus>
-        <button class="flex-shrink-0 btn btn-link text-secondary p-0"
-                data-bs-toggle="modal" data-bs-target="#settingsModal"
-                title="Settings">
-          <i class="bi bi-gear-fill fs-5"></i>
-        </button>
       </div>
     </nav>
+
+    <!-- ── Settings accordion ──────────────────────────────────────────── -->
+    <div id="settingsSection" class="ps-3 pe-3 ps-md-5">
+      <div class="accordion accordion-flush" id="settingsAccordion">
+        <div class="accordion-item border-bottom">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed px-0 py-2" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#settingsCollapse"
+                    aria-expanded="false" aria-controls="settingsCollapse">
+              <i class="bi bi-gear-fill me-2 text-secondary"></i>Meilisearch Setup
+            </button>
+          </h2>
+          <div id="settingsCollapse" class="accordion-collapse collapse">
+            <div class="accordion-body px-0 pb-4">
+
+              <!-- Warning shown when not yet configured -->
+              <div id="setupWarning" class="alert alert-warning d-flex gap-2 align-items-start mb-4" style="max-width:42rem;">
+                <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+                <div>
+                  <strong>Setup required before searching.</strong><br>
+                  Enter your Meilisearch instance URL, admin API key, and search API key below,
+                  then click <em>Save Settings</em> — the search bar will be ready right away.
+                </div>
+              </div>
+
+              <!-- Configuration form -->
+              <div class="row g-3" style="max-width:42rem;">
+                <div class="col-12">
+                  <label for="settingUrl" class="form-label fw-semibold">Instance URL</label>
+                  <input type="url" id="settingUrl" class="form-control"
+                         placeholder="https://meilisearch.example.com">
+                  <div class="form-text">
+                    The URL of your Meilisearch instance reachable from your browser.
+                    <strong>Must use HTTPS</strong> — HTTP URLs will be blocked by the browser's
+                    mixed-content policy when requested from this page (syncing via the extension
+                    still works for any URL).
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <label for="settingAdminKey" class="form-label fw-semibold">Admin API Key</label>
+                  <input type="password" id="settingAdminKey" class="form-control" autocomplete="off">
+                  <div class="form-text">
+                    Used to create indices, apply settings, and sync your history. Never shared with anyone.
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <label for="settingSearchKey" class="form-label fw-semibold">
+                    Search API Key
+                    <span class="text-body-secondary fw-normal">
+                      (optional — auto-generated from the admin key when left blank)
+                    </span>
+                  </label>
+                  <input type="password" id="settingSearchKey" class="form-control" autocomplete="off">
+                  <div class="form-text">
+                    A key with search-only permissions. If omitted, one will be created automatically
+                    from the admin key when you save.
+                  </div>
+                </div>
+
+                <div class="col-12 d-flex flex-wrap align-items-center gap-2">
+                  <button type="button" class="btn btn-primary" id="btnSaveSettings">
+                    <i class="bi bi-floppy me-1"></i>Save Settings
+                  </button>
+                  <button type="button" class="btn btn-success" id="btnSyncHistory" disabled>
+                    <i class="bi bi-arrow-repeat me-1"></i>Sync History
+                  </button>
+                  <div id="syncStatus" class="alert py-2 px-3 mb-0 flex-grow-1" style="display:none;max-width:28rem;"></div>
+                </div>
+                <div class="col-12">
+                  <p class="text-body-secondary small mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <strong>Sync History</strong> imports your full browsing history into Meilisearch.
+                    It only runs when you click the button — never automatically.
+                  </p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ── Results ─────────────────────────────────────────────────────── -->
     <div class="ps-3 pe-3 ps-md-5 pt-2">
       <div id="results"></div>
-    </div>
-
-    <!-- ── Settings modal ─────────────────────────────────────────────── -->
-    <div class="modal fade" id="settingsModal" tabindex="-1"
-         aria-labelledby="settingsModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="settingsModalLabel">
-              <i class="bi bi-gear-fill me-2"></i>Meilisearch settings
-            </h5>
-            <button type="button" class="btn-close"
-                    data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label for="settingUrl" class="form-label">Instance URL</label>
-              <input type="url" id="settingUrl" class="form-control"
-                     placeholder="http://localhost:7700">
-              <div class="form-text">
-                The URL of your Meilisearch instance.
-              </div>
-            </div>
-            <div class="mb-3">
-              <label for="settingKey" class="form-label">Search API Key</label>
-              <input type="password" id="settingKey" class="form-control"
-                     autocomplete="off">
-              <div class="form-text">
-                A key with search-only permissions. Found in your Meilisearch dashboard.
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary"
-                    data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-primary"
-                    id="btnSaveSettings">Save</button>
-          </div>
-        </div>
-      </div>
     </div>
 
     <script src="/assets/js/bootstrap.bundle.min.js"
@@ -149,64 +197,235 @@
           "light";
         document.querySelector("html").setAttribute("data-bs-theme", colorMode);
       }
-
-      // Set theme on load
-      updateTheme()
-
-      // Update theme when the preferred scheme changes
-      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme)
+      updateTheme();
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
     </script>
 
     <script type="module">
       import { MeiliSearch } from 'https://esm.sh/meilisearch@0.48.0';
 
-      // ── Settings (localStorage) ──────────────────────────────────────────
+      // ── Storage keys ──────────────────────────────────────────────────────
 
-      const LS_URL = 'meili_url';
-      const LS_KEY = 'meili_api_key';
+      const LS_URL        = 'meili_url';
+      const LS_ADMIN_KEY  = 'meili_admin_key';
+      const LS_SEARCH_KEY = 'meili_search_key';
+
+      // ── Settings helpers ──────────────────────────────────────────────────
 
       const getSettings = () => ({
-        url:    localStorage.getItem(LS_URL)  ?? 'http://localhost:7700',
-        apiKey: localStorage.getItem(LS_KEY)  ?? '',
+        url:       localStorage.getItem(LS_URL)        ?? '',
+        adminKey:  localStorage.getItem(LS_ADMIN_KEY)  ?? '',
+        searchKey: localStorage.getItem(LS_SEARCH_KEY) ?? '',
       });
 
+      const isConfigured = () => {
+        const { url, adminKey } = getSettings();
+        return url.trim() !== '' && adminKey.trim() !== '';
+      };
+
       const makeClient = () => {
-        const { url, apiKey } = getSettings();
-        return new MeiliSearch({ host: url, apiKey });
+        const { url, searchKey, adminKey } = getSettings();
+        if (!url.trim()) return null;
+        return new MeiliSearch({ host: url, apiKey: searchKey || adminKey });
       };
 
       let client       = makeClient();
-      // historyIndex is kept for the fallback title lookup (see search()).
-      // page-chunks is queried via client.multiSearch(), not a standalone handle.
-      let historyIndex = client.index('browsing-history');
-
-      const settingsModalEl = document.getElementById('settingsModal');
-      const settingUrlEl    = document.getElementById('settingUrl');
-      const settingKeyEl    = document.getElementById('settingKey');
-
-      // Pre-fill the modal with current values every time it opens.
-      settingsModalEl.addEventListener('show.bs.modal', () => {
-        const { url, apiKey } = getSettings();
-        settingUrlEl.value = url;
-        settingKeyEl.value = apiKey;
-      });
-
-      document.getElementById('btnSaveSettings').addEventListener('click', () => {
-        localStorage.setItem(LS_URL, settingUrlEl.value.trim() || 'http://localhost:7700');
-        localStorage.setItem(LS_KEY, settingKeyEl.value.trim());
-        // Rebuild the client from the new settings.
-        client       = makeClient();
-        historyIndex = client.index('browsing-history');
-        bootstrap.Modal.getInstance(settingsModalEl).hide();
-        // Refresh results if there is an active query.
-        const q = inputEl.value.trim();
-        if (q) search(q);
-      });
+      let historyIndex = client?.index('browsing-history') ?? null;
 
       // ── DOM refs ──────────────────────────────────────────────────────────
 
-      const inputEl   = document.getElementById('inputQuery');
-      const resultsEl = document.getElementById('results');
+      const inputEl          = document.getElementById('inputQuery');
+      const resultsEl        = document.getElementById('results');
+      const settingUrlEl     = document.getElementById('settingUrl');
+      const settingAdminEl   = document.getElementById('settingAdminKey');
+      const settingSearchEl  = document.getElementById('settingSearchKey');
+      const saveBtn          = document.getElementById('btnSaveSettings');
+      const syncBtn          = document.getElementById('btnSyncHistory');
+      const syncStatusEl      = document.getElementById('syncStatus');
+      const setupWarningEl    = document.getElementById('setupWarning');
+      const settingsCollapse  = document.getElementById('settingsCollapse');
+      const settingsSectionEl = document.getElementById('settingsSection');
+
+      // ── UI state ──────────────────────────────────────────────────────────
+
+      function updateUiState() {
+        const configured = isConfigured();
+
+        // Show/hide the warning alert inside the accordion
+        setupWarningEl.style.display = configured ? 'none' : '';
+
+        // Unlock the Sync button only once settings are saved
+        syncBtn.disabled = !configured;
+
+        // Rebuild the search client with fresh settings
+        client       = makeClient();
+        historyIndex = client?.index('browsing-history') ?? null;
+      }
+
+      // ── Pre-fill settings form ────────────────────────────────────────────
+
+      const { url: storedUrl, adminKey: storedAdmin, searchKey: storedSearch } = getSettings();
+      if (storedUrl)    settingUrlEl.value    = storedUrl;
+      if (storedAdmin)  settingAdminEl.value  = storedAdmin;
+      if (storedSearch) settingSearchEl.value = storedSearch;
+
+      // ── Initial accordion & UI state ──────────────────────────────────────
+      // Expand the accordion on first load if not yet configured so the user
+      // sees the setup form immediately. After that the accordion is user-controlled.
+
+      updateUiState();
+      if (!isConfigured()) {
+        bootstrap.Collapse.getOrCreateInstance(settingsCollapse, { toggle: false }).show();
+      }
+
+      // ── Meilisearch key generation ────────────────────────────────────────
+
+      /**
+       * Calls the Meilisearch Keys API to create a search-only key.
+       * Requires the Meilisearch instance to allow CORS from this origin.
+       * @param {string} url
+       * @param {string} adminKey
+       * @returns {Promise<string>} The new search key value
+       */
+      async function generateSearchKey(url, adminKey) {
+        const resp = await fetch(`${url.replace(/\/$/, '')}/keys`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${adminKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            description: 'Ownggle search key (auto-generated)',
+            actions: ['search'],
+            indexes: ['browsing-history', 'page-chunks'],
+            expiresAt: null,
+          }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        if (!json.key) throw new Error('No key in response');
+        return json.key;
+      }
+
+      // ── Persist settings ──────────────────────────────────────────────────
+
+      /**
+       * Saves settings to localStorage (for the search client) AND relays
+       * them to the extension's chrome.storage.local via the content-script
+       * bridge (for the service worker's onVisited handler and sync).
+       */
+      function persistSettings(url, adminKey, searchKey) {
+        localStorage.setItem(LS_URL,        url);
+        localStorage.setItem(LS_ADMIN_KEY,  adminKey);
+        localStorage.setItem(LS_SEARCH_KEY, searchKey);
+
+        // If running inside the extension context (content script injected),
+        // relay the settings so the service worker can use them too.
+        window.postMessage(
+          { type: 'OWNGGLE_SAVE_SETTINGS', url, adminKey, searchKey },
+          location.origin,
+        );
+      }
+
+      // ── Save settings button ──────────────────────────────────────────────
+
+      saveBtn.addEventListener('click', async () => {
+        const url      = settingUrlEl.value.trim();
+        const adminKey = settingAdminEl.value.trim();
+        let searchKey  = settingSearchEl.value.trim();
+
+        if (!url || !adminKey) {
+          alert('Instance URL and Admin API Key are required.');
+          return;
+        }
+
+        saveBtn.disabled    = true;
+        saveBtn.innerHTML   = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+        // Auto-generate a search-only key if none was provided
+        if (!searchKey) {
+          try {
+            searchKey = await generateSearchKey(url, adminKey);
+            settingSearchEl.value = searchKey;
+          } catch {
+            // Fall back: use the admin key for search (less secure but functional)
+            searchKey = '';
+          }
+        }
+
+        persistSettings(url, adminKey, searchKey);
+        // Only update warning + sync button — do NOT collapse the accordion so
+        // the user can immediately click Sync History without reopening it.
+        updateUiState();
+
+        saveBtn.disabled  = false;
+        saveBtn.innerHTML = '<i class="bi bi-floppy me-1"></i>Save Settings';
+      });
+
+      // ── Sync history button ───────────────────────────────────────────────
+
+      syncBtn.addEventListener('click', () => {
+        if (!isConfigured()) return;
+        syncBtn.disabled = true;
+        setSyncStatus('info', '<span class="spinner-border spinner-border-sm me-1"></span>Starting sync…');
+        // Relay to content-script bridge → service worker
+        window.postMessage({ type: 'OWNGGLE_SYNC_HISTORY' }, location.origin);
+      });
+
+      function setSyncStatus(variant, html) {
+        const map = { info: 'alert-info', success: 'alert-success', danger: 'alert-danger' };
+        syncStatusEl.className = `alert py-2 px-3 mb-0 flex-grow-1 ${map[variant] ?? 'alert-info'}`;
+        syncStatusEl.innerHTML = html;
+        syncStatusEl.style.display = '';
+      }
+
+      // ── Extension bridge messages ─────────────────────────────────────────
+      // Responses from the content-script bridge (OWNGGLE_*) are delivered
+      // back to this page via window.postMessage.
+
+      window.addEventListener('message', (event) => {
+        if (event.source !== window) return;
+        const msg = event.data;
+        if (!msg || typeof msg.type !== 'string') return;
+
+        switch (msg.type) {
+          case 'OWNGGLE_SETTINGS_SAVED':
+            // Settings were persisted to chrome.storage.local — nothing extra needed.
+            break;
+
+          case 'OWNGGLE_SETTINGS_ERROR':
+            console.warn('[ownggle] Could not persist settings to extension storage:', msg.error);
+            break;
+
+          case 'OWNGGLE_SYNC_STARTED':
+            setSyncStatus('info', '<span class="spinner-border spinner-border-sm me-1"></span>Sync in progress…');
+            break;
+
+          case 'OWNGGLE_SYNC_PROGRESS': {
+            const pct = msg.total > 0
+              ? Math.round((msg.indexed / msg.total) * 100)
+              : 0;
+            setSyncStatus('info',
+              `<span class="spinner-border spinner-border-sm me-1"></span>` +
+              `Syncing… ${msg.indexed.toLocaleString()} / ${msg.total.toLocaleString()} (${pct}%)`);
+            break;
+          }
+
+          case 'OWNGGLE_SYNC_COMPLETE':
+            setSyncStatus('success',
+              `<i class="bi bi-check-circle-fill me-1"></i>` +
+              `Sync complete — ${(msg.total ?? 0).toLocaleString()} items indexed.`);
+            syncBtn.disabled = false;
+            break;
+
+          case 'OWNGGLE_SYNC_ERROR':
+            setSyncStatus('danger',
+              `<i class="bi bi-exclamation-triangle-fill me-1"></i>` +
+              `Sync error: ${escapeHtml(msg.error ?? 'unknown error')}`);
+            syncBtn.disabled = false;
+            break;
+        }
+      });
 
       // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -247,28 +466,20 @@
       // phrasing, etc. are all rendered in the user's language.
       moment.locale(navigator.language);
 
-      // lastVisitTime from chrome.history is ms since the Unix epoch (1970).
-      // Chrome's raw SQLite stores µs since 1601, but the extension API
-      // normalises this before exposing it — no manual conversion needed.
       function formatDate(ms) {
         const m = moment(ms);
-        // < 30 days → relative phrasing:  "2 hours ago", "yesterday", "3 weeks ago"
-        // ≥ 30 days → locale month + year: "March 2024", "mars 2024"
         return moment().diff(m, 'days') < 30 ? m.fromNow() : m.format('MMMM YYYY');
       }
 
       function visitMetaHtml(visitCount, lastVisitTime) {
         const parts = [];
-        if (visitCount     != null) parts.push(`Visited ${visitCount.toLocaleString()} time${visitCount !== 1 ? 's' : ''}`);
-        if (lastVisitTime  != null) parts.push(`most recently ${formatDate(lastVisitTime)}`);
+        if (visitCount    != null) parts.push(`Visited ${visitCount.toLocaleString()} time${visitCount !== 1 ? 's' : ''}`);
+        if (lastVisitTime != null) parts.push(`most recently ${formatDate(lastVisitTime)}`);
         return parts.length
           ? `<small class="text-body-secondary mb-0">${parts.join(', ')}</small>`
           : '';
       }
 
-      // Returns the two search-engine cards for a given query string.
-      // Shown after the 3rd result (or at the end / on no results).
-      // Never called when the query is empty.
       function engineCardsHtml(query) {
         const q = encodeURIComponent(query);
         return `
@@ -306,12 +517,9 @@
           </div>`;
       }
 
-      // ── Search ────────────────────────────────────────────────────────────
+      // ── Result rendering ──────────────────────────────────────────────────
 
       function resultItemHtml({ url, title, snippet, visitCount, lastVisitTime }) {
-        // chrome.history.onVisited fires before the page title is known, so
-        // Chrome sometimes writes the raw URL as the title. Detect that and
-        // fall back to the cleaned URL so we never render "https://…" as a title.
         const displayTitle = title && !/^https?:\/\//i.test(title)
           ? title
           : cleanUrl(url) || 'Untitled';
@@ -342,17 +550,29 @@
           </div>`;
       }
 
+      // ── Search ────────────────────────────────────────────────────────────
+
       async function search(query) {
         resultsEl.innerHTML = '';
         if (!query.trim()) return;
 
         const cards = engineCardsHtml(query);
 
+        // Show a helpful message if the instance is not yet configured
+        if (!client) {
+          resultsEl.innerHTML =
+            `<div class="alert alert-warning mt-3" style="max-width:42rem;">
+              <i class="bi bi-exclamation-triangle-fill me-2"></i>
+              <strong>Not configured.</strong>
+              Please set up your Meilisearch instance using the
+              <a href="#" onclick="document.getElementById('settingsCollapse').classList.add('show');return false;"
+                 class="alert-link">settings panel above</a>
+              before searching.
+            </div>` + cards;
+          return;
+        }
+
         try {
-          // Single federated multi-search across both indices in one round-trip.
-          // browsing-history matches on title/hostname; page-chunks matches on
-          // full page content and gets a 1.2× weight boost.
-          // The response is a single merged hit list ordered by weighted score.
           const { hits } = await client.multiSearch({
             federation: { limit: 20 },
             queries: [
@@ -382,17 +602,7 @@
             return;
           }
 
-          // Deduplicate and merge hits from both indices.
-          //
-          // The shared page key is:
-          //   browsing-history hit  →  hit.id
-          //   page-chunks hit       →  hit.historyId
-          // (browsing-history.id === page-chunks.historyId by design)
-          //
-          // Map preserves insertion order == federated relevance order.
-          // If the same page appears in both indices, the first (higher-scored)
-          // hit claims the slot; the second hit only fills in missing fields.
-          const pageMap = new Map(); // pageKey → { url, title, snippet }
+          const pageMap = new Map();
 
           for (const hit of hits) {
             const isHistory = hit._federation.indexUid === 'browsing-history';
@@ -407,7 +617,6 @@
                 lastVisitTime: isHistory ? (hit.lastVisitTime  ?? null) : null,
               });
             } else {
-              // Merge: later hit for the same page fills in what is still null.
               const entry = pageMap.get(pageKey);
               if (isHistory && entry.title         === null) entry.title         = hit.title          ?? null;
               if (isHistory && entry.visitCount    === null) entry.visitCount    = hit.visitCount     ?? null;
@@ -416,8 +625,6 @@
             }
           }
 
-          // Fetch titles for page-chunks-only results (no browsing-history hit
-          // appeared in the federated results for that page).
           const missingIds = [...pageMap.entries()]
             .filter(([, v]) => v.title === null)
             .map(([k]) => k);
@@ -439,7 +646,6 @@
             }
           }
 
-          // Render in relevance order and splice in the engine cards.
           const resultItems = [...pageMap.values()].map(resultItemHtml);
           resultItems.splice(Math.min(3, resultItems.length), 0, cards);
           resultsEl.innerHTML = resultItems.join('');
@@ -450,17 +656,29 @@
         }
       }
 
+      // ── Settings section visibility ───────────────────────────────────────
+      // Hide the settings accordion while the user is actively searching so
+      // results take full priority. Restore it when the search bar is cleared.
+
+      function setSettingsVisible(visible) {
+        settingsSectionEl.style.display = visible ? '' : 'none';
+      }
+
       // ── URL query parameter (?q=…) ────────────────────────────────────────
-      // Enables using this page as a browser search engine:
-      //   https://yourname.github.io/path/to/webview/?q=%s
 
       const initialQuery = new URLSearchParams(location.search).get('q') ?? '';
       if (initialQuery) {
         inputEl.value = initialQuery;
+        setSettingsVisible(false);
         search(initialQuery);
       }
 
-      inputEl.addEventListener('input', debounce(e => search(e.target.value), 25));
+      const debouncedSearch = debounce(q => search(q), 25);
+      inputEl.addEventListener('input', (e) => {
+        const hasQuery = e.target.value.trim().length > 0;
+        setSettingsVisible(!hasQuery);
+        debouncedSearch(e.target.value);
+      });
     </script>
   </body>
 </html>
