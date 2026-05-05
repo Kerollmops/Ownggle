@@ -1,0 +1,30 @@
+name: Build and Upload to gh-pages
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+
+      - name: Purge the CSS
+        run: |
+          npm install -g purgecss
+          purgecss --content 'webview/*.html' --css webview/assets/css/*.css --output 'webview/assets/css'
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./webview
+          cname: own.kerollmops.com
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
