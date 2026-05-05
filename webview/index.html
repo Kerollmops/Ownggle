@@ -68,15 +68,6 @@
       }
 
       .engine-cards { max-width: 46rem; }
-
-      /* Flush accordion styling */
-      #settingsAccordion .accordion-button {
-        font-weight: 600;
-        font-size: 0.9rem;
-      }
-      #settingsAccordion .accordion-button:not(.collapsed) {
-        box-shadow: none;
-      }
     </style>
   </head>
   <body>
@@ -94,18 +85,18 @@
     </nav>
 
     <!-- ── Settings accordion ──────────────────────────────────────────── -->
-    <div id="settingsSection" class="ps-3 pe-3 ps-md-5">
+    <div id="settingsSection" class="px-3 mx-3">
       <div class="accordion accordion-flush" id="settingsAccordion">
-        <div class="accordion-item border-bottom">
+        <div class="accordion-item">
           <h2 class="accordion-header">
-            <button class="accordion-button collapsed px-0 py-2" type="button"
+            <button class="accordion-button collapsed py-2" type="button"
                     data-bs-toggle="collapse" data-bs-target="#settingsCollapse"
                     aria-expanded="false" aria-controls="settingsCollapse">
               <i class="bi bi-gear-fill me-2 text-secondary"></i>Meilisearch Setup
             </button>
           </h2>
           <div id="settingsCollapse" class="accordion-collapse collapse">
-            <div class="accordion-body px-0 pb-4">
+            <div class="accordion-body pb-4">
 
               <!-- Warning shown when not yet configured -->
               <div id="setupWarning" class="alert alert-warning d-flex gap-2 align-items-start mb-4" style="max-width:42rem;">
@@ -278,35 +269,6 @@
         bootstrap.Collapse.getOrCreateInstance(settingsCollapse, { toggle: false }).show();
       }
 
-      // ── Meilisearch key generation ────────────────────────────────────────
-
-      /**
-       * Calls the Meilisearch Keys API to create a search-only key.
-       * Requires the Meilisearch instance to allow CORS from this origin.
-       * @param {string} url
-       * @param {string} adminKey
-       * @returns {Promise<string>} The new search key value
-       */
-      async function generateSearchKey(url, adminKey) {
-        const resp = await fetch(`${url.replace(/\/$/, '')}/keys`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${adminKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            description: 'Ownggle search key (auto-generated)',
-            actions: ['search'],
-            indexes: ['browsing-history', 'page-chunks'],
-            expiresAt: null,
-          }),
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const json = await resp.json();
-        if (!json.key) throw new Error('No key in response');
-        return json.key;
-      }
-
       // ── Persist settings ──────────────────────────────────────────────────
 
       /**
@@ -334,24 +296,13 @@
         const adminKey = settingAdminEl.value.trim();
         let searchKey  = settingSearchEl.value.trim();
 
-        if (!url || !adminKey) {
-          alert('Instance URL and Admin API Key are required.');
+        if (!url || !adminKey || !searchKey) {
+          alert('Instance URL, Admin API Key, and Search API Key are required.');
           return;
         }
 
         saveBtn.disabled    = true;
         saveBtn.innerHTML   = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
-
-        // Auto-generate a search-only key if none was provided
-        if (!searchKey) {
-          try {
-            searchKey = await generateSearchKey(url, adminKey);
-            settingSearchEl.value = searchKey;
-          } catch {
-            // Fall back: use the admin key for search (less secure but functional)
-            searchKey = '';
-          }
-        }
 
         persistSettings(url, adminKey, searchKey);
         // Only update warning + sync button — do NOT collapse the accordion so
