@@ -19,7 +19,10 @@ jobs:
       - name: Purge the CSS
         run: |
           npm install -g purgecss
-          purgecss --content 'webview/*.html' --css webview/assets/css/*.css --output 'webview/assets/css'
+          purgecss --content 'webview/*.html' \
+                   --css 'webview/assets/css/bootstrap.min.css' \
+                   --css 'webview/assets/css/bootstrap-icons.min.css' \
+                   --output 'webview/assets/css'
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
