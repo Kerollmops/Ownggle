@@ -1,3 +1,5 @@
 /meilisearch
 /data.ms
 /dumps
+/ChromeExtension/node_modules
+/ChromeExtension/dist

@@ -1,0 +1,18 @@
+{
+  "name": "history-meilisearch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension that indexes the full browsing history into Meilisearch on install.",
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "dompurify": "^3.4.2",
+    "meilisearch": "^0.48.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

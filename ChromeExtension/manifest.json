@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "History to Meilisearch",
+  "version": "1.0",
+  "description": "On install, reads the full browsing history and indexes it into a local Meilisearch instance.",
+  "permissions": ["history"],
+  "host_permissions": ["http://localhost:7700/*"],
+  "background": {
+    "service_worker": "dist/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["dist/content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
